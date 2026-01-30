@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+
   <style>
     html,body{height:100%;margin:0;background:transparent;}
     #wrap{position:relative;width:100%;height:100%;min-height:420px;border-radius:18px;overflow:hidden;
@@ -16,7 +17,7 @@
       color:#fff;white-space:pre-wrap;max-width:calc(100% - 20px);pointer-events:none;}
   </style>
 
-  <!-- Tell the browser what "three" means -->
+  <!-- This is the IMPORTANT part: it tells modules what "three" means -->
   <script type="importmap">
   {
     "imports": {
@@ -25,6 +26,7 @@
   }
   </script>
 </head>
+
 <body>
   <div id="wrap">
     <div id="shadow"></div>
@@ -39,11 +41,17 @@
     const hud = document.getElementById("hud");
     const setHUD = (m)=> hud.textContent = m;
 
-    const GLB_URL = "./model.glb";
+    // ✅ BEST: rename your GLB to model.glb and use this:
+    let GLB_URL = "./model.glb";
 
+    // ✅ If you are NOT renaming, comment the line above and use this exact filename:
+    // GLB_URL = "./ImageToStl.com_Wii+-+Nicktoons_+Attack+of+The+Toybots!+-+Playable+Characters+-+GIR+(Dog+Disguise).glb";
+
+    // Pupils (we can fine-tune these after we see it)
     const EYE_L = new THREE.Vector3(-0.35, 0.55, 0.85);
     const EYE_R = new THREE.Vector3( 0.35, 0.55, 0.85);
     const PUPIL_MAX = 0.08;
+
     const HOP_HEIGHT = 0.35, HOP_SPEED = 2.4;
 
     const wrap = document.getElementById("wrap");
@@ -58,97 +66,4 @@
     camera.position.set(0, 1.2, 4.2);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.45));
-    const key = new THREE.DirectionalLight(0xffffff, 1.05); key.position.set(3,5,4); scene.add(key);
-    const fill= new THREE.DirectionalLight(0xffffff, 0.55); fill.position.set(-4,2,2); scene.add(fill);
-
-    function resize(){
-      const w = wrap.clientWidth || 420, h = wrap.clientHeight || 420;
-      renderer.setSize(w, h, false);
-      camera.aspect = w/h;
-      camera.updateProjectionMatrix();
-    }
-    addEventListener("resize", resize); resize();
-
-    const raycaster = new THREE.Raycaster();
-    const mouseNDC  = new THREE.Vector2(0,0);
-    const targetPlane = new THREE.Plane(new THREE.Vector3(0,0,1), -0.8);
-    const targetWorld = new THREE.Vector3();
-
-    function onMove(cx, cy){
-      const r = wrap.getBoundingClientRect();
-      const x = (cx - r.left)/r.width;
-      const y = (cy - r.top )/r.height;
-      mouseNDC.set(x*2-1, -(y*2-1));
-    }
-    wrap.addEventListener("mousemove", e => onMove(e.clientX, e.clientY), {passive:true});
-    wrap.addEventListener("touchmove", e => e.touches[0] && onMove(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
-
-    let model=null, eyeL=null, eyeR=null, pupilL=null, pupilR=null;
-
-    setHUD("Loading model…");
-    const loader = new GLTFLoader();
-    loader.load(GLB_URL, (gltf)=>{
-      model = gltf.scene;
-      setHUD("Loaded ✅");
-
-      const box = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3(); box.getSize(size);
-      const center = new THREE.Vector3(); box.getCenter(center);
-      model.position.sub(center);
-
-      const maxDim = Math.max(size.x,size.y,size.z) || 1;
-      model.scale.setScalar(2.2/maxDim);
-      model.rotation.y = 0.25;
-      scene.add(model);
-
-      eyeL = new THREE.Object3D(); eyeL.position.copy(EYE_L); model.add(eyeL);
-      eyeR = new THREE.Object3D(); eyeR.position.copy(EYE_R); model.add(eyeR);
-
-      const pupilGeo = new THREE.SphereGeometry(0.07, 16, 16);
-      const pupilMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.9 });
-      pupilL = new THREE.Mesh(pupilGeo, pupilMat);
-      pupilR = new THREE.Mesh(pupilGeo, pupilMat);
-      eyeL.add(pupilL); eyeR.add(pupilR);
-    }, undefined, (e)=>{ console.error(e); setHUD("Model failed ❌"); });
-
-    const clock = new THREE.Clock();
-
-    function updateEyes(){
-      if(!model || !eyeL || !pupilL) return;
-      raycaster.setFromCamera(mouseNDC, camera);
-      raycaster.ray.intersectPlane(targetPlane, targetWorld);
-      const targetLocal = model.worldToLocal(targetWorld.clone());
-
-      [[eyeL,pupilL],[eyeR,pupilR]].forEach(([eye,pupil])=>{
-        const dir = targetLocal.clone().sub(eye.position);
-        dir.z = 0;
-        const len = dir.length();
-        if(len > 1e-5) dir.multiplyScalar(1/len);
-        dir.multiplyScalar(PUPIL_MAX);
-        pupil.position.set(dir.x, dir.y, 0);
-      });
-    }
-
-    function updateHop(t){
-      if(!model) return;
-      const s = (Math.sin(t*HOP_SPEED)+1)*0.5;
-      const hop = Math.pow(s, 1.6) * HOP_HEIGHT;
-      model.position.y = hop;
-
-      const sx = 1.05 - hop * 0.55;
-      const sy = 1.00 - hop * 0.75;
-      shadowEl.style.transform = `translateX(-50%) scale(${sx}, ${sy})`;
-      shadowEl.style.opacity = String(0.58 - hop * 0.65);
-    }
-
-    function tick(){
-      const t = clock.getElapsedTime();
-      updateHop(t);
-      updateEyes();
-      renderer.render(scene, camera);
-      requestAnimationFrame(tick);
-    }
-    tick();
-  </script>
-</body>
-</html>
+    const key = new THREE.DirectionalLight(0xffffff, 1.05); key.position.set(3,5,4)
